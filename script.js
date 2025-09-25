@@ -31,15 +31,20 @@ const historyRef = database.ref('history/' + SYMBOL_HISTORICO);
 // 3. LÓGICA DE HORARIO Y ACTUALIZACIÓN
 // =================================================================
 
+/**
+ * Verifica si la hora actual está dentro del horario de mercado (8:30 a.m. - 3:00 p.m.).
+ */
 function isMarketOpen() {
     const now = new Date();
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
+    // Convertir horas y minutos a minutos totales del día
+    const currentTimeInMinutes = hours * 60 + minutes;
+    
+    // Horario: 8:30 a.m. a 3:00 p.m. (3 PM es 15:00)
     const openTime = 8 * 60 + 30; // 8:30 a.m.
     const closeTime = 15 * 60;   // 3:00 p.m.
-    
-    const currentTimeInMinutes = hours * 60 + minutes;
     
     return currentTimeInMinutes >= openTime && currentTimeInMinutes <= closeTime;
 }
@@ -47,8 +52,10 @@ function isMarketOpen() {
 async function updateData() {
     console.log('Actualizando datos...');
 
+    const marketIsOpen = isMarketOpen();
+
     // -------------------------------------------------------------
-    // PASO A: OBTENER DATOS DE COTIZACIÓN ACTUALES
+    // PASO A: OBTENER DATOS DE COTIZACIÓN ACTUALES (Incluyendo Precio Anterior 'A')
     // -------------------------------------------------------------
     const targetUrlQuote = `https://api.databursatil.com/v1/cotizaciones?token=${TOKEN_DB}&emisora_serie=${SYMBOL_ACTUAL}&bolsa=BMV,BIVA&concepto=U,P,A,X,N,C,M,V,O,I`;
     
@@ -60,29 +67,67 @@ async function updateData() {
             const danhos = quoteData[SYMBOL_ACTUAL].BMV;
             const priceValue = parseFloat(danhos.U);
             const changeValue = parseFloat(danhos.C);
+            const previousCloseValue = parseFloat(danhos.A); // <- Precio de cierre anterior (Necesario para el porcentaje)
             const volumeValue = parseInt(danhos.V);
 
-            document.getElementById("price").textContent = `$${priceValue.toFixed(2)}`;
-            document.getElementById("change").textContent = `$${changeValue.toFixed(2)}`;
-            document.getElementById("volume").textContent = volumeValue.toLocaleString("es-MX");
-            
-            const changeCard = document.querySelector('.change-card');
-            changeCard.classList.remove('positive-change', 'negative-change');
-            if (changeValue > 0) {
-                changeCard.classList.add('positive-change');
-            } else if (changeValue < 0) {
-                changeCard.classList.add('negative-change');
+            // -------------------------------------------------------------
+            // CÁLCULO DEL PORCENTAJE
+            // -------------------------------------------------------------
+            let percentageChange = 0;
+            if (previousCloseValue && previousCloseValue !== 0) {
+                 percentageChange = (changeValue / previousCloseValue) * 100;
             }
+            
+            // 1. Formatear el texto de porcentaje (ej: −0.070 (0.25%) hoy)
+            const percentageText = `${changeValue >= 0 ? '' : '−'}${Math.abs(changeValue).toFixed(3)} (${Math.abs(percentageChange).toFixed(2)}%) hoy`;
 
             // -------------------------------------------------------------
-            // PASO B: GUARDAR EL PRECIO ACTUAL EN FIREBASE
+            // ACTUALIZAR EL HTML Y LOS COLORES
             // -------------------------------------------------------------
-            const now = new Date();
-            const timestampKey = now.toISOString().replace(/\./g, '_');
-            historyRef.child(timestampKey).set({
-                price: priceValue,
-                timestamp: now.toISOString()
-            });
+            
+            // 2. Aplicar la clase correcta para el color (Esto es lo que activa el rojo o verde en CSS)
+            const changeCard = document.querySelector('.change-card');
+            changeCard.classList.remove('positive-change', 'negative-change');
+            
+            if (changeValue > 0) {
+                changeCard.classList.add('positive-change'); // Aplica color verde
+            } else if (changeValue < 0) {
+                changeCard.classList.add('negative-change'); // Aplica color rojo
+            }
+            
+            // 3. Actualizar el precio actual y volumen
+            document.getElementById("price").textContent = `$${priceValue.toFixed(2)}`;
+            document.getElementById("volume").textContent = volumeValue.toLocaleString("es-MX");
+            
+            // 4. Mostrar el monto de cambio (ej: +$0.07 o −$0.07) en el ID 'change-value'
+            const formattedChangeAmount = `${changeValue >= 0 ? '+' : '−'}$${Math.abs(changeValue).toFixed(2)}`;
+            const changeValueElement = document.getElementById("change-value");
+            if(changeValueElement) {
+                changeValueElement.textContent = formattedChangeAmount;
+            } else {
+                // FALLBACK si el usuario no actualizó el HTML
+                document.getElementById("change").textContent = formattedChangeAmount; 
+            }
+            
+            // 5. Mostrar el porcentaje en el ID 'change-percentage'
+            const changePercentageElement = document.getElementById("change-percentage");
+            if(changePercentageElement) {
+                 changePercentageElement.textContent = percentageText;
+            }
+            
+            // -------------------------------------------------------------
+            // PASO B: GUARDAR EL PRECIO ACTUAL EN FIREBASE (SOLO si el mercado está abierto)
+            // -------------------------------------------------------------
+            if (marketIsOpen) {
+                const now = new Date();
+                const timestampKey = now.toISOString().replace(/\./g, '_');
+                historyRef.child(timestampKey).set({
+                    price: priceValue,
+                    timestamp: now.toISOString()
+                });
+            } else {
+                console.log("Mercado cerrado. Saltando guardar datos en Firebase para evitar la línea plana.");
+            }
 
         } else {
             console.error('No se encontraron datos de cotización actuales.');
@@ -99,6 +144,7 @@ async function updateData() {
         historicalData = [];
 
         if (historyFromDB) {
+            // Filtrar solo datos de las últimas 24 horas
             const oneDayAgo = new Date().getTime() - (24 * 60 * 60 * 1000);
 
             Object.keys(historyFromDB).forEach(key => {
@@ -167,4 +213,4 @@ async function updateData() {
 }
 
 updateData();
-setInterval(updateData, 60 * 1000);
+setInterval(updateData, 5 * 60 * 1000);
