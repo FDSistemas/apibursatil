@@ -7,6 +7,7 @@
     --accent-color: #6a62d8; /* Color principal de acento */
     --positive-color: #10b981; /* Color verde para subidas */
     --negative-color: #ef4444; /* Color rojo para bajadas */
+    --title-color: #4BC0C0;
 }
 
 /* Estilos Globales */
@@ -33,7 +34,7 @@ header {
 header h1 {
     font-size: 2.2em;
     font-weight: 700;
-    color: var(--text-light);
+    color: var(--title-color);
 }
 
 .company-logo {
