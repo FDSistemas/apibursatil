@@ -31,21 +31,26 @@ const historyRef = database.ref('history/' + SYMBOL_HISTORICO);
 // 3. LÓGICA DE HORARIO Y ACTUALIZACIÓN
 // =================================================================
 
+/**
+ * Verifica si la hora actual está dentro del horario de mercado (8:30 a.m. - 3:00 p.m. CST/GMT-6).
+ */
 function isMarketOpen() {
     const now = new Date();
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
-    const openTime = 8 * 60 + 30; // 8:30 a.m.
-    const closeTime = 15 * 60;   // 3:00 p.m.
-    
     const currentTimeInMinutes = hours * 60 + minutes;
+    
+    const openTime = 8 * 60 + 30; 
+    const closeTime = 15 * 60;   
     
     return currentTimeInMinutes >= openTime && currentTimeInMinutes <= closeTime;
 }
 
 async function updateData() {
     console.log('Actualizando datos...');
+
+    const marketIsOpen = isMarketOpen();
 
     // -------------------------------------------------------------
     // PASO A: OBTENER DATOS DE COTIZACIÓN ACTUALES
@@ -58,31 +63,54 @@ async function updateData() {
 
         if (quoteData && quoteData[SYMBOL_ACTUAL]) {
             const danhos = quoteData[SYMBOL_ACTUAL].BMV;
-            const priceValue = parseFloat(danhos.U);
-            const changeValue = parseFloat(danhos.C);
+            const priceValue = parseFloat(danhos.U); // precio actual
+            const previousCloseValue = parseFloat(danhos.A); // precio de cierre anterior
             const volumeValue = parseInt(danhos.V);
 
-            document.getElementById("price").textContent = `$${priceValue.toFixed(2)}`;
-            document.getElementById("change").textContent = `$${changeValue.toFixed(2)}`;
-            document.getElementById("volume").textContent = volumeValue.toLocaleString("es-MX");
-            
-            const changeCard = document.querySelector('.change-card');
-            changeCard.classList.remove('positive-change', 'negative-change');
-            if (changeValue > 0) {
-                changeCard.classList.add('positive-change');
-            } else if (changeValue < 0) {
-                changeCard.classList.add('negative-change');
+            // -------------------------------------------------------------
+            // CÁLCULO DEL CAMBIO DIARIO
+            // -------------------------------------------------------------
+            let changeValue = 0;
+            let percentageChange = 0;
+            if (previousCloseValue && previousCloseValue !== 0) {
+                changeValue = priceValue - previousCloseValue;
+                percentageChange = (changeValue / previousCloseValue) * 100;
             }
 
+            // Texto formateado
+            const formattedChangeAmount = `${changeValue >= 0 ? '+' : '−'}$${Math.abs(changeValue).toFixed(2)}`;
+            const percentageText = `${changeValue >= 0 ? '+' : '−'}${Math.abs(percentageChange).toFixed(2)}%`;
+
             // -------------------------------------------------------------
-            // PASO B: GUARDAR EL PRECIO ACTUAL EN FIREBASE
+            // ACTUALIZAR EL HTML Y LOS COLORES
             // -------------------------------------------------------------
-            const now = new Date();
-            const timestampKey = now.toISOString().replace(/\./g, '_');
-            historyRef.child(timestampKey).set({
-                price: priceValue,
-                timestamp: now.toISOString()
-            });
+            const changeCard = document.querySelector('.change-card');
+            changeCard.classList.remove('positive-change', 'negative-change');
+            
+            if (changeValue > 0) {
+                changeCard.classList.add('positive-change'); 
+            } else if (changeValue < 0) {
+                changeCard.classList.add('negative-change'); 
+            }
+            
+            document.getElementById("price").textContent = `$${priceValue.toFixed(2)}`;
+            document.getElementById("volume").textContent = volumeValue.toLocaleString("es-MX");
+            document.getElementById("change-value").textContent = formattedChangeAmount;
+            document.getElementById("change-percentage").textContent = percentageText;
+            
+            // -------------------------------------------------------------
+            // PASO B: GUARDAR EL PRECIO ACTUAL EN FIREBASE (SOLO si el mercado está abierto)
+            // -------------------------------------------------------------
+            if (marketIsOpen) {
+                const now = new Date();
+                const timestampKey = now.toISOString().replace(/\./g, '_');
+                historyRef.child(timestampKey).set({
+                    price: priceValue,
+                    timestamp: now.toISOString()
+                });
+            } else {
+                console.log("Mercado cerrado. Saltando guardar datos en Firebase.");
+            }
 
         } else {
             console.error('No se encontraron datos de cotización actuales.');
