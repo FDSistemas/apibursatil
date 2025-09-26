@@ -113,6 +113,16 @@ main {
 }
 
 /* --- Clases Dinámicas (añadidas por JS) --- */
+/* Estilo para el porcentaje de cambio */
+.metric-percentage {
+    display: block;
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-top: 5px;
+    color: var(--text-muted); /* Color neutral por defecto */
+}
+
+/* --- Clases Dinámicas (añadidas por JS) --- */
 .metric-card.positive-change {
     border-left-color: var(--positive-color);
 }
@@ -120,9 +130,11 @@ main {
     border-left-color: var(--negative-color);
 }
 
-.metric-card.positive-change .metric-value {
+.metric-card.positive-change .metric-value,
+.metric-card.positive-change .metric-percentage { /* AÑADIDO: Aplicar a porcentaje */
     color: var(--positive-color);
 }
-.metric-card.negative-change .metric-value {
+.metric-card.negative-change .metric-value,
+.metric-card.negative-change .metric-percentage { /* AÑADIDO: Aplicar a porcentaje */
     color: var(--negative-color);
 }
